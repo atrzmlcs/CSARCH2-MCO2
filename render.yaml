@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: csarch2-mco2
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app

@@ -1,290 +1,386 @@
-import decimal
+"""
+arithmetic_operations.py
 
-def encode_dpd(d1, d2, d3):
+IEEE 754 decimal32 subtraction and division.
+
+This module provides:
+  - A full IEEE 754 decimal32 hex <-> Decimal decoder (DPD decoding)
+  - Round-trip encoding of a Decimal result back to binary / hexadecimal
+  - Step-by-step subtraction and division with configurable rounding
+  - Reusable functions for the Machine 4 GUI and the terminal program
+"""
+
+import contextlib
+import io
+from decimal import (
+    Decimal,
+    DivisionByZero,
+    InvalidOperation,
+    ROUND_CEILING,
+    ROUND_DOWN,
+    ROUND_FLOOR,
+    ROUND_HALF_EVEN,
+    getcontext,
+)
+
+from decimal32 import decimal32_encode
+
+ROUNDING_MODE_NAMES = {
+    "chopping": ROUND_DOWN,
+    "round_up": ROUND_CEILING,
+    "round_down": ROUND_FLOOR,
+    "ties_to_even": ROUND_HALF_EVEN,
+}
+
+FRIENDLY_ROUNDING = {
+    "chopping": "chopping (toward zero)",
+    "round_up": "round up (toward +infinity)",
+    "round_down": "round down (toward -infinity)",
+    "ties_to_even": "round to nearest, ties to even",
+}
+
+
+# ---------------------------------------------------------------------------
+# DPD decoding (IEEE 754 decimal32 -> Decimal)
+# ---------------------------------------------------------------------------
+
+def decode_dpd(bits):
     """
-    Converts 3 decimal digits into a 10-bit Densely Packed Decimal (DPD).
+    Decode a 10-bit Densely Packed Decimal group into 3 decimal digits.
+    This is the exact inverse of `encode_dpd` in decimal32.py.
     """
-    b1, b2, b3 = f"{d1:04b}", f"{d2:04b}", f"{d3:04b}"
-    a, b, c, d = b1[0], b1[1], b1[2], b1[3]
-    e, f, g, h = b2[0], b2[1], b2[2], b2[3]
-    i, j, k, m = b3[0], b3[1], b3[2], b3[3]
-    
-    aei = a + e + i
-    
-    if aei == "000": return b+c+d + f+g+h + "0" + j+k+m
-    elif aei == "001": return b+c+d + f+g+h + "100" + m
-    elif aei == "010": return b+c+d + j+k+h + "101" + m
-    elif aei == "011": return b+c+d + "10" + h + "111" + m
-    elif aei == "100": return j+k+d + f+g+h + "110" + m
-    elif aei == "101": return f+g+d + "01" + h + "111" + m
-    elif aei == "110": return j+k+d + "00" + h + "111" + m
-    elif aei == "111": return "00" + d + "11" + h + "111" + m
+    if len(bits) != 10 or set(bits) - {"0", "1"}:
+        raise ValueError("DPD group must be exactly 10 binary bits.")
 
-def decimal32_encode(base_str, exp_str="0"):
-    print("\n--- BEGIN PARSING TRACE ---")
-    
-    base_lower = base_str.lower()
-    if base_lower in ["infinity", "+infinity", "inf", "+inf"]:
-        print("Trace: Positive Infinity detected.")
-        return {"sign": "0", "comb": "11110", "exp_cont": "000000", "coeff_cont": "0000000000 0000000000"}
-    if base_lower in ["-infinity", "-inf"]:
-        print("Trace: Negative Infinity detected.")
-        return {"sign": "1", "comb": "11110", "exp_cont": "000000", "coeff_cont": "0000000000 0000000000"}
-    if base_lower == "nan":
-        print("Trace: NaN (Not a Number) detected.")
-        return {"sign": "0", "comb": "11111", "exp_cont": "000000", "coeff_cont": "0000000000 0000000000"}
+    # Decision tree derived from the encoder's eight aei cases
+    if bits[6] == "0":  # aei = 000
+        return (int(bits[0:3], 2), int(bits[3:6], 2), int(bits[7:10], 2))
+    if bits[7:9] == "00":  # aei = 001
+        return (int(bits[0:3], 2), int(bits[3:6], 2), 8 + int(bits[9]))
+    if bits[7:9] == "01":  # aei = 010
+        return (int(bits[0:3], 2), 8 + int(bits[5]), int(bits[3:5] + bits[9], 2))
+    if bits[7:9] == "10":  # aei = 100
+        return (8 + int(bits[2]), int(bits[3:6], 2), int(bits[0:2] + bits[9], 2))
 
-    is_negative = False
-    if base_str.startswith("-"):
-        is_negative = True
-        base_str = base_str[1:]
-    elif base_str.startswith("+"):
-        base_str = base_str[1:]
-        
-    sign_bit = "1" if is_negative else "0"
-    print(f"Step 1: Check sign. Input is {'negative' if is_negative else 'positive'}, sign bit = {sign_bit}")
-    
-    if "." in base_str:
-        left, right = base_str.split(".")
-        whole_num = int(left + right)
-        exp_shift = len(right)
-        print(f"Step 2: Not a fully whole number. Shift radix right by {exp_shift}. Adjusted exponent: {exp_str} - {exp_shift} = {int(exp_str) - exp_shift}")
-    else:
-        whole_num = int(base_str)
-        exp_shift = 0
-        print(f"Step 2: Already a whole number. No radix shift needed.")
-        
-    final_exp = int(exp_str) - exp_shift
-    digits_str = str(whole_num)
+    # bits[7:9] == "11" -> aei is 011, 101, 110 or 111
+    if bits[3:5] == "10":  # aei = 011
+        return (int(bits[0:3], 2), 8 + int(bits[5]), 8 + int(bits[9]))
+    if bits[3:5] == "01":  # aei = 101
+        return (8 + int(bits[2]), int(bits[0:2] + bits[5], 2), 8 + int(bits[9]))
+    if bits[3:5] == "00":  # aei = 110
+        return (8 + int(bits[2]), 8 + int(bits[5]), int(bits[0:2] + bits[9], 2))
+    return (8 + int(bits[2]), 8 + int(bits[5]), 8 + int(bits[9]))  # aei = 111
 
-    # Cohort normalization to enforce E_max bounds
-    if final_exp > 90:
-        shifts = 0
-        while final_exp > 90 and len(digits_str) < 7:
-            whole_num *= 10
-            final_exp -= 1
-            digits_str = str(whole_num)
-            shifts += 1
-        if shifts > 0:
-            print(f"Step 2b: Exponent exceeds max normal (90). Shift radix right {shifts} times -> {digits_str} x 10^{final_exp}")
 
-    # Cohort normalization to salvage E_min underflows (stripping trailing zeros)
-    if final_exp < -101:
-        shifts = 0
-        # Only shift if it divides perfectly by 10 (trailing zero)
-        while final_exp < -101 and whole_num % 10 == 0 and whole_num != 0:
-            whole_num //= 10
-            final_exp += 1
-            digits_str = str(whole_num)
-            shifts += 1
-        if shifts > 0:
-            print(f"Step 2c: Exponent is below absolute min (-101). Shift radix left {shifts} times -> {digits_str} x 10^{final_exp}")
-    
-    if len(digits_str) > 7:
-        raise ValueError("Error: Input exceeds the 7 significant digits limit.")
-        
-    padded_digits = digits_str.zfill(7)
-    print(f"Step 3: Check if normalized to 7 whole digits. Pad leading 0's to the left: {padded_digits} x 10^{final_exp}")
-    
-    # Check bounds against absolute stored limits
-    if final_exp > 90: 
-        print("Trace: Exponent still exceeds max limit (90) after max radix shifts. Overflow to Infinity.")
-        return {"sign": sign_bit, "comb": "11110", "exp_cont": "000000", "coeff_cont": "0000000000 0000000000"}
-        
-    if final_exp < -101:
-        raise ValueError(f"Error: Adjusted exponent ({final_exp}) is below Decimal32 minimum bound (-101).")
-    
-    e_biased = final_exp + 101
-    print(f"Step 4: Now normalized, get exponent representation: e = {final_exp} + 101 (bias) = {e_biased}")
-    
-    exp_bin = f"{e_biased:08b}"
-    print(f"Step 5: Turn exponent representation ({e_biased}) into 8-bit binary = {exp_bin}")
-    
-    exp_2bits = exp_bin[0:2]
-    print(f"Step 6: The 2 leftmost bits of the exponent ({exp_2bits}) will be used for combination field.")
-    
-    msd = int(padded_digits[0])
-    msd_bin = f"{msd:04b}"
-    print(f"Step 7: Identify most significant digit in {padded_digits} which is {msd}.")
-    print(f"Step 8: Turn MSD into 4-bit binary = {msd_bin}.")
-    
-    if msd >= 0 and msd <= 7:
-        comb_field = exp_2bits + msd_bin[-3:]
-        print(f"Step 9: MSD is 0-7. Combination field (abcde): ab ({exp_2bits}) + cde ({msd_bin[-3:]}) = {comb_field}")
-    else:
-        comb_field = "11" + exp_2bits + msd_bin[-1:]
-        print(f"Step 9: MSD is 8-9. Combination field (11cde): 11 + ab ({exp_2bits}) + e ({msd_bin[-1:]}) = {comb_field}")
-        
-    exp_cont = exp_bin[2:8]
-    print(f"Step 10: Exponent continuation (6 remaining bits from exponent) = {exp_cont}")
-    
-    group1 = padded_digits[1:4]
-    group2 = padded_digits[4:7]
-    
-    dpd1 = encode_dpd(int(group1[0]), int(group1[1]), int(group1[2]))
-    dpd2 = encode_dpd(int(group2[0]), int(group2[1]), int(group2[2]))
-    
-    print(f"Step 11: Coefficient continuation (DPD of {group1} and {group2}):")
-    print(f"         {group1} -> {dpd1}")
-    print(f"         {group2} -> {dpd2}")
-    print("--- END PARSING TRACE ---\n")
-    
-    coeff_cont = f"{dpd1} {dpd2}"
-    
-    return {
-        "sign": sign_bit,
-        "comb": comb_field,
-        "exp_cont": exp_cont,
-        "coeff_cont": coeff_cont
-    }
-
-# Configure the global decimal context for decimal32 limits
-# Decimal32 has a precision of 7 decimal digits.
-decimal.getcontext().prec = 7
-decimal.getcontext().rounding = decimal.ROUND_HALF_EVEN
-
-# --- HELPER FUNCTIONS (Integrate your Part 1 code here) ---
-
-def decode_from_decimal32(hex_string):
+def decode_hex32(hex_str):
     """
-    Decodes an IEEE 754 decimal32 hex string into a Decimal object.
-    You must insert your specific DPD or BID decoding logic here.
+    Decode an 8-digit IEEE 754 decimal32 hexadecimal string into a Decimal.
+    Handles the combination field (MSD + 2 exponent bits), the 6-bit exponent
+    continuation, and the two 10-bit DPD coefficient groups.
     """
-    print(f"[*] Decoding IEEE Hex {hex_string} to Decimal...")
-    # Placeholder: Assuming the logic returns a valid Decimal
-    return decimal.Decimal('0') 
+    cleaned = str(hex_str).strip().replace("0x", "").replace("0X", "")
+    if len(cleaned) != 8 or any(c not in "0123456789abcdefABCDEF" for c in cleaned):
+        raise ValueError(
+            f"Invalid decimal32 hex: {hex_str!r}. "
+            "Expected exactly 8 hex digits, e.g. 22400525 or 0x22400525."
+        )
+
+    bits = f"{int(cleaned, 16):032b}"
+    sign = bits[0]
+    comb, exp_cont, coeff_cont = bits[1:6], bits[6:12], bits[12:32]
+
+    # Special encodings: 11110* = Infinity, 11111* = NaN
+    if comb[0:2] == "11" and comb[2:4] == "11":
+        if comb[4] == "1":
+            return Decimal("NaN")
+        return Decimal("-Infinity") if sign == "1" else Decimal("Infinity")
+
+    if comb[0:2] == "11":  # MSD is 8 or 9
+        msd = 8 if comb[4] == "0" else 9
+        exp_high2 = comb[2:4]
+    else:  # MSD is 0-7, 4th MSD bit is implicit 0
+        msd = int(comb[2:5], 2)
+        exp_high2 = comb[0:2]
+
+    exponent = int(exp_high2 + exp_cont, 2) - 101
+    digits = (msd,) + decode_dpd(coeff_cont[0:10]) + decode_dpd(coeff_cont[10:20])
+    return Decimal((int(sign), digits, exponent))
+
+
+# ---------------------------------------------------------------------------
+# Encoding back to binary / hexadecimal
+# ---------------------------------------------------------------------------
 
 def encode_to_decimal32(dec_value):
     """
-    Takes a Python Decimal object from Part 3's math output, extracts its 
-    components, and feeds it into the Part 1 DPD encoder.
+    Encode a Decimal (result of an arithmetic operation) into the spaced
+    binary form and the 8-digit hexadecimal form of a decimal32 number.
     """
     t = dec_value.as_tuple()
-    
-    # Handle IEEE 754 special cases
+
     if dec_value.is_infinite():
         base_str = "-inf" if t.sign else "inf"
         fields = decimal32_encode(base_str, "0")
     elif dec_value.is_nan():
         fields = decimal32_encode("nan", "0")
+    elif dec_value.is_zero():
+        fields = decimal32_encode("0", "0")
     else:
-        # Reconstruct standard base string and exponent string from the tuple
         digits_str = "".join(str(d) for d in t.digits)
         sign_str = "-" if t.sign else ""
-        
-        # If the result is mathematically zero, normalize it
-        if not digits_str or digits_str == "0":
-            base_str = "0"
-            exp_str = "0"
-        else:
-            base_str = sign_str + digits_str
-            exp_str = str(t.exponent)
+        fields = decimal32_encode(sign_str + digits_str, str(t.exponent))
 
-        # Feed the reconstructed strings into your Part 1 function
-        fields = decimal32_encode(base_str, exp_str)
-        
-    # Reconstruct the spaced binary string and hex value from your dictionary
-    binary_spaced = f"{fields['sign']} {fields['comb']} {fields['exp_cont']} {fields['coeff_cont']}"
+    binary_spaced = (
+        f"{fields['sign']} {fields['comb']} {fields['exp_cont']} "
+        f"{fields['coeff_cont']}"
+    )
     bin_solid = binary_spaced.replace(" ", "")
     hex_val = f"{int(bin_solid, 2):08X}"
-    
     return binary_spaced, hex_val
 
-# --- ARITHMETIC OPERATIONS (Part 3.b & 3.c) ---
 
-def perform_subtraction(op1, op2):
-    print("\n--- Step-by-Step Subtraction ---")
-    
-    t1 = op1.as_tuple()
-    t2 = op2.as_tuple()
-    
-    exp1, exp2 = t1[2], t2[2] 
-    
-    print(f"Operand 1: {op1} (Exponent: {exp1})")
-    print(f"Operand 2: {op2} (Exponent: {exp2})")
-    
+def format_decimal_value(value):
+    """Human-friendly formatting for a Decimal result."""
+    if value.is_infinite():
+        return "Infinity" if value > 0 else "-Infinity"
+    if value.is_nan():
+        return "NaN"
+    if value.is_zero():
+        return "0"
+    text = format(value, "f")
+    if len(text) > 32:
+        text = str(value)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Input parsing
+# ---------------------------------------------------------------------------
+
+def parse_operands(op1, op2, operand_format):
+    """Parse both operands given a shared format: 'decimal' or 'hex'."""
+    fmt = str(operand_format).strip().lower()
+
+    if fmt in ("hex", "hexadecimal", "ieee", "ieee hex"):
+        return decode_hex32(op1), decode_hex32(op2)
+    if fmt in ("dec", "decimal"):
+        try:
+            return Decimal(op1), Decimal(op2)
+        except InvalidOperation as exc:
+            raise ValueError(
+                "One of the operands is not a valid decimal number."
+            ) from exc
+    raise ValueError("Operand format must be 'decimal' or 'hex'.")
+
+
+# ---------------------------------------------------------------------------
+# Arithmetic operations (step-by-step)
+# ---------------------------------------------------------------------------
+
+def _apply_context(rounding_mode):
+    getcontext().prec = 7
+    getcontext().rounding = ROUNDING_MODE_NAMES.get(rounding_mode, ROUND_HALF_EVEN)
+
+
+def perform_subtraction(op1, op2, rounding_mode="ties_to_even"):
+    print("--- Step-by-step subtraction ---")
+
+    if op1.is_nan() or op2.is_nan():
+        print("An operand is NaN. The result is NaN (invalid operation).")
+        return Decimal("NaN")
+
+    print(f"Operand 1 : {format_decimal_value(op1)}")
+    print(f"Operand 2 : {format_decimal_value(op2)}")
+
+    if op1.is_infinite() or op2.is_infinite():
+        if op1.is_infinite() and op2.is_infinite() and (op1 > 0) == (op2 > 0):
+            print("Step 1: Infinity - Infinity is undefined. The result is NaN.")
+            return Decimal("NaN")
+        result = op1 if op1.is_infinite() else op2
+        print("Step 1: An infinity operand is present; the result carries its sign.")
+        print(f"Step 2: Applying rounding method ({FRIENDLY_ROUNDING[rounding_mode]}).")
+        return result
+
+    exp1, exp2 = op1.as_tuple().exponent, op2.as_tuple().exponent
     target_exp = min(exp1, exp2)
-    print(f"Step 1: Aligning exponents to the smaller value ({target_exp}).")
-    
-    result = op1 - op2
-    
-    print(f"Step 2: Subtracting coefficients.")
-    print(f"Step 3: Applying rounding method ({decimal.getcontext().rounding}).")
-    
-    final_result = +result 
-    print(f"Final Decimal Result: {final_result}")
-    
-    return final_result
+    print(f"Step 1: Aligning exponents to the smaller value (10^{target_exp}).")
+    print("Step 2: Subtracting coefficients.")
+    print(
+        f"Step 3: Applying rounding method ({FRIENDLY_ROUNDING[rounding_mode]}) "
+        "at 7 significant digits."
+    )
 
-def perform_division(op1, op2):
-    print("\n--- Step-by-Step Division ---")
-    
-    if op2 == 0:
-        print("Error: Division by zero.")
-        return decimal.Decimal('Infinity')
-        
-    t1 = op1.as_tuple()
-    t2 = op2.as_tuple()
-    
-    exp1, exp2 = t1[2], t2[2]
-    
-    print(f"Dividend: {op1} (Exponent: {exp1})")
-    print(f"Divisor: {op2} (Exponent: {exp2})")
-    
+    try:
+        result = op1 - op2
+    except InvalidOperation:
+        return Decimal("NaN")
+
+    return +result
+
+
+def perform_division(op1, op2, rounding_mode="ties_to_even"):
+    print("--- Step-by-step division ---")
+
+    if op1.is_nan() or op2.is_nan():
+        print("An operand is NaN. The result is NaN (invalid operation).")
+        return Decimal("NaN")
+
+    print(f"Dividend : {format_decimal_value(op1)}")
+    print(f"Divisor  : {format_decimal_value(op2)}")
+
+    if op2.is_zero():
+        if op1.is_zero():
+            print("Step 1: 0 / 0 is undefined. The result is NaN.")
+            return Decimal("NaN")
+        negative = op1.is_signed() != op2.is_signed()
+        print("Step 1: Division by zero detected.")
+        print(f"Step 2: The result is {('-' if negative else '')}Infinity.")
+        return Decimal("-Infinity") if negative else Decimal("Infinity")
+
+    if op1.is_infinite() and op2.is_infinite():
+        print("Step 1: Infinity / Infinity is undefined. The result is NaN.")
+        return Decimal("NaN")
+
+    if op1.is_infinite():
+        negative = op1.is_signed() != op2.is_signed()
+        print("Step 1: An infinite dividend is divided by a finite divisor.")
+        print(f"Step 2: The result is {('-' if negative else '')}Infinity.")
+        return Decimal("-Infinity") if negative else Decimal("Infinity")
+
+    if op2.is_infinite():
+        negative = op1.is_signed() != op2.is_signed()
+        print("Step 1: A finite dividend is divided by an infinite divisor.")
+        print(f"Step 2: The result is {('-' if negative else '')}0.")
+        return Decimal("-0") if negative else Decimal("0")
+
+    exp1, exp2 = op1.as_tuple().exponent, op2.as_tuple().exponent
     new_exp = exp1 - exp2
     print(f"Step 1: Subtracting exponents ({exp1} - {exp2} = {new_exp}).")
-    
-    print(f"Step 2: Dividing coefficients.")
-    print(f"Step 3: Applying rounding method ({decimal.getcontext().rounding}).")
-    result = op1 / op2
-    
-    final_result = +result
-    print(f"Final Decimal Result: {final_result}")
-    
-    return final_result
+    print("Step 2: Dividing coefficients.")
+    print(
+        f"Step 3: Applying rounding method ({FRIENDLY_ROUNDING[rounding_mode]}) "
+        "at 7 significant digits."
+    )
 
-# --- MAIN EXECUTION ---
+    try:
+        result = op1 / op2
+    except (InvalidOperation, DivisionByZero):
+        return Decimal("NaN")
+
+    return +result
+
+
+def compute(op1, op2, operation, rounding_mode="ties_to_even"):
+    """
+    Run a subtraction or division and return a result dictionary suitable for
+    both the terminal and the GUI.
+
+    Returns:
+        {
+            "ok": True,
+            "operation": "subtraction" | "division",
+            "rounding": <friendly rounding name>,
+            "steps": <step-by-step text>,
+            "decimal": <final decimal value>,
+            "binary": <spaced binary form> | None,
+            "hex": <hexadecimal form> | None,
+            "special": "inf" | "nan" | "zero" | None,
+            "encoding_note": <message if binary/hex could not be produced>
+        }
+    """
+    op = str(operation).strip().lower()
+    if op not in ("sub", "div"):
+        raise ValueError("Operation must be 'sub' (subtraction) or 'div' (division).")
+    if rounding_mode not in FRIENDLY_ROUNDING:
+        rounding_mode = "ties_to_even"
+
+    _apply_context(rounding_mode)
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        if op == "sub":
+            result = perform_subtraction(op1, op2, rounding_mode)
+        else:
+            result = perform_division(op1, op2, rounding_mode)
+    steps = buffer.getvalue()
+
+    special = None
+    if result.is_infinite():
+        special = "inf"
+    elif result.is_nan():
+        special = "nan"
+    elif result.is_zero():
+        special = "zero"
+
+    binary = hex_out = None
+    encoding_note = ""
+    encode_trace = ""
+    try:
+        enc_buffer = io.StringIO()
+        with contextlib.redirect_stdout(enc_buffer):
+            binary, hex_out = encode_to_decimal32(result)
+        encode_trace = enc_buffer.getvalue()
+        hex_out = "0x" + hex_out
+    except ValueError as exc:
+        encoding_note = str(exc)
+
+    return {
+        "ok": True,
+        "operation": "subtraction" if op == "sub" else "division",
+        "rounding": FRIENDLY_ROUNDING[rounding_mode],
+        "steps": steps,
+        "encode_trace": encode_trace,
+        "decimal": format_decimal_value(result),
+        "binary": binary,
+        "hex": hex_out,
+        "special": special,
+        "encoding_note": encoding_note,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Terminal entry point
+# ---------------------------------------------------------------------------
 
 def main():
     print("--- IEEE 754 Decimal32 Calculator ---")
-    
-    # 1. Ask user for the operation
-    operation = input("Will you use subtraction or division? (type 'sub' or 'div'): ").strip().lower()
-    
-    if operation not in ['sub', 'div']:
+
+    operation = input(
+        "Will you use subtraction or division? (type 'sub' or 'div'): "
+    ).strip().lower()
+    if operation not in ("sub", "div"):
         print("Error: Invalid operation selected. Please restart and choose 'sub' or 'div'.")
         return
-    
-    print("\n--- Operand Format ---")
-    # 2. Ask for the shared format for BOTH operands
-    op_format = input("Will the operands be in Decimal or Hex? (type 'dec' or 'hex'): ").strip().lower()
-    
-    print("\n--- Inputs ---")
-    # 3. Ask for the actual values
+
+    op_format = input(
+        "Will the operands be in Decimal or Hex? (type 'dec' or 'hex'): "
+    ).strip().lower()
+
+    rounding_mode = input(
+        "Rounding method (ties_to_even / chopping / round_up / round_down): "
+    ).strip().lower()
+
     op1_input = input("Enter Operand 1: ").strip()
     op2_input = input("Enter Operand 2: ").strip()
-    
-    # Parse BOTH operands based on the single format choice
-    if op_format == 'hex':
-        op1 = decode_from_decimal32(op1_input)
-        op2 = decode_from_decimal32(op2_input)
-    else:
-        op1 = decimal.Decimal(op1_input)
-        op2 = decimal.Decimal(op2_input)
-    
-    # 4. Do the task
-    if operation == 'sub':
-        final_decimal = perform_subtraction(op1, op2)
-    elif operation == 'div':
-        final_decimal = perform_division(op1, op2)
-        
-    # Final Output formatting (Part 3.c)
-    spaced_bin, hex_out = encode_to_decimal32(final_decimal)
-    
-    print("\n--- Final Encoded Outputs ---")
-    print(f"i) Decimal: {final_decimal}")
-    print(f"ii) Binary: {spaced_bin}")
-    print(f"iii) Hexadecimal: {hex_out}")
+
+    try:
+        op1, op2 = parse_operands(op1_input, op2_input, op_format)
+    except ValueError as error:
+        print(f"\nError: {error}")
+        return
+
+    result = compute(op1, op2, operation, rounding_mode)
+
+    print()
+    print(result["steps"])
+    print()
+    print("--- Final Encoded Outputs ---")
+    print(f"i)  Decimal      : {result['decimal']}")
+    print(f"ii) Binary       : {result['binary'] or 'unavailable'}")
+    print(f"iii) Hexadecimal : {result['hex'] or 'unavailable'}")
+    if result["encoding_note"]:
+        print(f"Note: {result['encoding_note']}")
+
 
 if __name__ == "__main__":
     main()

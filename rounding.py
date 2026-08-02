@@ -37,6 +37,7 @@ from typing import Dict
 
 
 DECIMAL32_MAX_SIGNIFICANT_DIGITS = 7
+MAX_TARGET_PRECISION = 50
 
 
 @dataclass
@@ -58,6 +59,11 @@ def validate_target_digits(target_digits: int) -> int:
         raise ValueError("Target digits must be a whole number.")
     if target_digits < 1:
         raise ValueError("Target digits must be at least 1.")
+    if target_digits > MAX_TARGET_PRECISION:
+        raise ValueError(
+            f"Target precision is too large. Maximum is {MAX_TARGET_PRECISION} "
+            "significant digits/bits."
+        )
     return target_digits
 
 # DECIMAL ROUNDING
@@ -193,7 +199,7 @@ def round_decimal_significant(
             "whose last retained digit is even."
         ),
         "input": (
-            f"The input has {original_count} significant digit(s)"
+            f"The input has {original_count} significant digit(s). "
             f"The requested precision is {target_digits} significant digit(s)."
         ),
     }

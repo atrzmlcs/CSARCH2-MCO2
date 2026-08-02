@@ -1,3 +1,7 @@
+import re
+
+_DECIMAL_PATTERN = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
+
 def encode_dpd(d1, d2, d3):
     """
     Converts 3 decimal digits into a 10-bit Densely Packed Decimal (DPD).
@@ -31,6 +35,11 @@ def decimal32_encode(base_str, exp_str="0"):
     if base_lower == "nan":
         print("Trace: NaN (Not a Number) detected.")
         return {"sign": "0", "comb": "11111", "exp_cont": "000000", "coeff_cont": "0000000000 0000000000"}
+
+    if _DECIMAL_PATTERN.fullmatch(base_str) is None:
+        raise ValueError(
+            "Invalid decimal number. Use digits, an optional sign, and a single decimal point."
+        )
 
     is_negative = False
     if base_str.startswith("-"):

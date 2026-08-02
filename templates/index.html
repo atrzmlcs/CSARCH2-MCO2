@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decimal 32-bit Floating-Point · IEEE 754 decimal32</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ffffff'/%3E%3Ctext x='32' y='34' font-family='monospace' font-size='20' font-weight='bold' fill='%23000' text-anchor='middle'%3EG4%3C/text%3E%3Ctext x='32' y='50' font-family='monospace' font-size='12' font-weight='bold' fill='%23000' text-anchor='middle'%3ES40%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("m4-theme") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span class="mark-main">G4</span><span class="mark-sub">S40</span></div>
+        <div class="brand-text">
+          <h1>Decimal 32-bit Floating-Point</h1>
+          <p>IEEE 754 · decimal32 (DPD)</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Toggle theme">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>
+        </button>
+        <span class="status-dot"></span>
+        <span class="status-text">local</span>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Machines">
+      <button class="tab is-active" id="tab-convert" role="tab" aria-selected="true" aria-controls="panel-convert" data-tab="convert">
+        <span class="tab-num">01</span> Converter
+      </button>
+      <button class="tab" id="tab-round" role="tab" aria-selected="false" aria-controls="panel-round" data-tab="round">
+        <span class="tab-num">02</span> Rounding
+      </button>
+      <button class="tab" id="tab-arith" role="tab" aria-selected="false" aria-controls="panel-arith" data-tab="arith">
+        <span class="tab-num">03</span> Arithmetic
+      </button>
+    </nav>
+
+    <main>
+      <!-- ============ PANEL 1: CONVERTER ============ -->
+      <section class="panel is-active" id="panel-convert" role="tabpanel" aria-labelledby="tab-convert">
+        <div class="panel-head">
+          <h2>Decimal → Decimal32 Encoding</h2>
+          <p>Convert a decimal number to its IEEE 754 decimal32 (binary + hexadecimal) representation.</p>
+        </div>
+
+        <div class="card">
+          <form id="form-convert" class="form" autocomplete="off">
+            <div class="form-grid">
+              <div class="field">
+                <label for="convert-base">Decimal number</label>
+                <input type="text" id="convert-base" name="base" placeholder="e.g. 122.5 or infinity" spellcheck="false">
+                <div class="quick">
+                  <button type="button" class="chip" data-special="infinity">Infinity</button>
+                  <button type="button" class="chip" data-special="-infinity">-Infinity</button>
+                  <button type="button" class="chip" data-special="nan">NaN</button>
+                </div>
+              </div>
+              <div class="field field-narrow">
+                <label for="convert-exp">Base-10 exponent</label>
+                <input type="text" id="convert-exp" name="exp" placeholder="0" inputmode="numeric" spellcheck="false">
+                <p class="hint">Optional. e.g. 1.5 with exponent 3 → 1.5 × 10³</p>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" data-idle="Convert" data-busy="Encoding…">Convert</button>
+              <button type="reset" class="btn btn-ghost">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="result" id="result-convert" hidden></div>
+      </section>
+
+      <!-- ============ PANEL 2: ROUNDING ============ -->
+      <section class="panel" id="panel-round" role="tabpanel" aria-labelledby="tab-round" hidden>
+        <div class="panel-head">
+          <h2>Rounding Methods</h2>
+          <p>Round a decimal or binary number to a target precision using all four IEEE 754 rounding modes.</p>
+        </div>
+
+        <div class="card">
+          <form id="form-round" class="form" autocomplete="off">
+            <div class="form-grid">
+              <div class="field">
+                <label>Input type</label>
+                <div class="switch-row">
+                  <span class="switch-opt is-active" data-value="decimal">Decimal</span>
+                  <button type="button" class="switch" id="rtype-switch" role="switch" aria-checked="false" aria-label="Toggle between decimal and binary input" data-left="decimal" data-right="binary">
+                    <span class="switch-thumb"></span>
+                  </button>
+                  <span class="switch-opt" data-value="binary">Binary</span>
+                  <input type="hidden" name="rtype" id="rtype" value="decimal">
+                </div>
+              </div>
+              <div class="field field-narrow">
+                <label for="round-digits">Target digits / bits</label>
+                <input type="text" id="round-digits" name="digits" placeholder="e.g. 3" inputmode="numeric" spellcheck="false">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="round-value">Number</label>
+              <input type="text" id="round-value" name="value" placeholder="e.g. -0.7783 or 0.100101110" spellcheck="false">
+              <p class="hint" id="round-hint">Binary accepts 0/1 and an optional p-exponent, e.g. 1.001p5</p>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" data-idle="Round" data-busy="Rounding…">Round</button>
+              <button type="reset" class="btn btn-ghost">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="result" id="result-round" hidden></div>
+      </section>
+
+      <!-- ============ PANEL 3: ARITHMETIC ============ -->
+      <section class="panel" id="panel-arith" role="tabpanel" aria-labelledby="tab-arith" hidden>
+        <div class="panel-head">
+          <h2>Arithmetic Operations</h2>
+          <p>Perform subtraction or division on decimal or IEEE hexadecimal operands, with a step-by-step solution.</p>
+        </div>
+
+        <div class="card">
+          <form id="form-arith" class="form" autocomplete="off">
+            <div class="form-grid form-grid-3">
+              <div class="field">
+                <label>Operation</label>
+                <div class="switch-row">
+                  <span class="switch-opt is-active" data-value="sub">Subtract</span>
+                  <button type="button" class="switch" id="op-switch" role="switch" aria-checked="false" aria-label="Toggle between subtraction and division" data-left="sub" data-right="div">
+                    <span class="switch-thumb"></span>
+                  </button>
+                  <span class="switch-opt" data-value="div">Divide</span>
+                  <input type="hidden" name="op" id="op" value="sub">
+                </div>
+              </div>
+              <div class="field">
+                <label>Operand format</label>
+                <div class="switch-row">
+                  <span class="switch-opt is-active" data-value="dec">Decimal</span>
+                  <button type="button" class="switch" id="fmt-switch" role="switch" aria-checked="false" aria-label="Toggle between decimal and hexadecimal operands" data-left="dec" data-right="hex">
+                    <span class="switch-thumb"></span>
+                  </button>
+                  <span class="switch-opt" data-value="hex">Hex</span>
+                  <input type="hidden" name="fmt" id="fmt" value="dec">
+                </div>
+              </div>
+              <div class="field">
+                <label for="arith-rounding">Rounding method</label>
+                <select id="arith-rounding" name="rounding">
+                  <option value="ties_to_even" selected>Round to nearest, ties to even</option>
+                  <option value="chopping">Chopping (toward zero)</option>
+                  <option value="round_up">Round up (toward +∞)</option>
+                  <option value="round_down">Round down (toward −∞)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="arith-op1">Operand 1</label>
+                <input type="text" id="arith-op1" name="op1" placeholder="e.g. 122.5 or 0x22400525" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="arith-op2">Operand 2</label>
+                <input type="text" id="arith-op2" name="op2" placeholder="e.g. 0.5 or 0x22500000" spellcheck="false">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" data-idle="Compute" data-busy="Computing…">Compute</button>
+              <button type="reset" class="btn btn-ghost">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="result" id="result-arith" hidden></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Decimal 32-bit Floating-Point · CSARCH2 Simulation Project — IEEE 754 decimal32 (DPD).</p>
+      <p class="footer-group">Group 4 · S40 &nbsp;—&nbsp; Ferrer · Kabiling · Maglente · Malicsi</p>
+    </footer>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
