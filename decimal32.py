@@ -120,7 +120,7 @@ def decimal32_encode(base_str, exp_str="0"):
         print(f"Step 9: MSD is 0-7. Combination field (abcde): ab ({exp_2bits}) + cde ({msd_bin[-3:]}) = {comb_field}")
     else:
         comb_field = "11" + exp_2bits + msd_bin[-1:]
-        print(f"Step 9: MSD is 8-9. Combination field (11cde): 11 + ab ({exp_2bits}) + e ({msd_bin[-1:]}) = {comb_field}")
+        print(f"Step 9: MSD is 8-9. Combination field (11cde): 11 + cd ({exp_2bits}) + e ({msd_bin[-1:]}) = {comb_field}")
         
     exp_cont = exp_bin[2:8]
     print(f"Step 10: Exponent continuation (6 remaining bits from exponent) = {exp_cont}")
