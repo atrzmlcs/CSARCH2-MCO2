@@ -92,6 +92,10 @@ The following screenshots demonstrate the parser's ability to handle standard co
   <br>![Positive Infinity Parse](screenshots/specialcase_positiveinfinity_parse.jpg)
   <br>![Positive Infinity Output](screenshots/specialcase_positiveinfinity.jpg)
 
+* **Negative Infinity (Induced Overflow):** Negative sign parsed alongside mathematical overflow limits.
+  <br>![Negative Infinity Parse](screenshots/specialcase_negativeinfinity_parse.jpg)
+  <br>![Negative Infinity Output](screenshots/specialcase_negativeinfinity.jpg)
+
 * **NaN (Not a Number):** Demonstrates explicit string catching for undefined operations.
   <br>![NaN Parse](screenshots/nan_case_parse.jpg)
   <br>![NaN Output](screenshots/nan_case.jpg)
