@@ -79,11 +79,11 @@ Each module can also run standalone in the terminal:
 The following screenshots demonstrate the parser's ability to handle standard conversions alongside IEEE 754 architectural extremes, proving mathematically accurate cohort normalization, boundary limits, and special formatting.
 
 ### 1. Normal Cases
-* **Small MSD (0-7):** Demonstrates standard Combination Field parsing.
+* **Small MSD (0-7):** Demonstrates standard Combination Field (abcde) parsing.
   <br>![Small MSD Parse](screenshots/normalcase_smalldigit_parse.jpg)
   <br>![Small MSD Output](screenshots/normalcase_smalldigit.jpg)
 
-* **Large MSD (8-9):** Demonstrates the required `11 + ab + e` Combination Field shift.
+* **Large MSD (8-9):** Demonstrates the required `11 + cd + e` Combination Field shift.
   <br>![Large MSD Parse](screenshots/normalcase_largedigit_parse.jpg)
   <br>![Large MSD Output](screenshots/normalcase_largedigit.jpg)
 
