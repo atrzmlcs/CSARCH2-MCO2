@@ -76,6 +76,8 @@ Each module can also run standalone in the terminal:
 
 ## Test Cases & Screenshots
 
+## Decimal 32-bit Floating-Point (Decimal32)
+
 The following screenshots demonstrate the parser's ability to handle standard conversions alongside IEEE 754 architectural extremes, proving mathematically accurate cohort normalization, boundary limits, and special formatting.
 
 ### 1. Normal Cases
@@ -115,6 +117,81 @@ The following screenshots demonstrate the parser's ability to handle standard co
 
 * **Hard Underflow Limit:** Proves the parser strictly defends the lower limits and correctly rejects un-rescuable values.
   <br>![Hard Underflow](screenshots/hard_underflow.jpg)
+
+## Rounding Test Cases & Screenshots
+
+The following screenshots demonstrate that the rounding module correctly
+performs all four IEEE 754 rounding methods using significant digits.
+The tests include normal inputs, special rounding cases, edge cases, and
+invalid inputs.
+
+### 1. Normal Cases
+
+-   **Normal Positive Number:** Demonstrates rounding a positive decimal
+    number that already matches the requested precision.
+    `<br>`{=html}![Normal Positive](screenshots/rounding_normal_positive.jpg)
+
+-   **Normal Negative Number:** Demonstrates rounding a negative decimal
+    number using significant digits. `<br>`{=html}![Normal
+    Negative](screenshots/rounding_normal_negative.jpg)
+
+-   **Positive Binary Input:** Demonstrates rounding a positive binary number using significant bits and all four IEEE 754 rounding methods.
+  <br>![Positive Binary](screenshots/rounding_positive_binary.jpg)
+
+-   **Negative Binary Input:** Demonstrates rounding a negative binary number using significant bits and all four IEEE 754 rounding methods.
+  <br>![Negative Binary](screenshots/negative_binary.jpg)
+
+### 2. Special Cases
+
+-   **Tie to Even (1.45 → 2 digits):** Demonstrates the tie-to-even rule
+    where the last retained digit is even. `<br>`{=html}![Tie Even
+    1.45](screenshots/tie_even_145.jpg)
+
+-   **Tie to Even (1.55 → 2 digits):** Demonstrates the tie-to-even rule
+    where the result rounds to the nearest value with an even last
+    digit. `<br>`{=html}![Tie Even 1.55](screenshots/tie_even_155.jpg)
+
+-   **Trailing Zeros:** Demonstrates that trailing zeros after the
+    decimal point are treated as significant digits.
+    `<br>`{=html}![Trailing Zeros](screenshots/trailing_zeros.jpg)
+
+-   **Leading Zeros:** Demonstrates that leading zeros are not counted
+    as significant digits. `<br>`{=html}![Leading
+    Zeros](screenshots/leading_zeros.jpg)
+
+### 3. Edge Cases
+
+-   **Maximum Decimal32 Precision:** Demonstrates rounding a value with
+    the maximum supported significant digits. `<br>`{=html}![Maximum
+    Precision](screenshots/max_precision.jpg)
+
+-   **More Than 7 Significant Digits:** Demonstrates rounding when the
+    input contains more than seven significant digits.
+    `<br>`{=html}![More Than 7
+    Digits](screenshots/more_than_7_digits.jpg)
+
+### 4. Incorrect Inputs
+
+-   **Invalid Decimal Input:** Rejects non-numeric decimal input.
+    `<br>`{=html}![Invalid Decimal](screenshots/invalid_decimal.jpg)
+
+-   **Invalid Binary Input:** Rejects binary input containing invalid
+    digits. `<br>`{=html}![Invalid
+    Binary](screenshots/invalid_binary.jpg)
+
+-   **Invalid Decimal Format:** Rejects decimal input with multiple
+    radix points. `<br>`{=html}![Invalid Decimal
+    Format](screenshots/invalid_decimal_format.jpg)
+
+-   **Empty Input:** Rejects empty input. `<br>`{=html}![Empty
+    Input](screenshots/empty_input.jpg)
+
+-   **Target Digits = 0:** Rejects a target precision of zero.
+    `<br>`{=html}![Target Zero](screenshots/target_zero.jpg)
+
+-   **Target Digits = abc:** Rejects non-numeric target precision.
+    `<br>`{=html}![Target ABC](screenshots/target_abc.jpg)
+
 
 ---
 
