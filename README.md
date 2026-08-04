@@ -192,6 +192,41 @@ invalid inputs.
 -   **Target Digits = abc:** Rejects non-numeric target precision.
     `<br>`{=html}![Target ABC](screenshots/target_abc.jpg)
 
+## Arithmetic Operations Test Cases & Screenshots
+
+The following screenshots demonstrate the application's ability to perform
+subtraction or division on operands. The tests confirm that the calculator
+correctly processes operands given in either decimal or IEEE hexadecimal form, 
+applies a selectable rounding method, and accurately displays the step-by-step 
+solution alongside the final Decimal, Binary (spaced), and Hexadecimal results.
+
+### 1. Normal Cases
+
+-   **Decimal Subtraction:** Demonstrates a standard subtraction operation, such as `122.5 − 0.5` using the ties to even rounding method, resulting in `122.0` and its properly spaced binary and hexadecimal output `0x22400520`
+  <br>![Decimal Subtraction](screenshots/arithmetic_decimal_sub.png)
+
+* **Hexadecimal Arithmetic:** Demonstrates decoding and performing subtraction or division on operands provided in IEEE hexadecimal form.
+  <br>![Hexadecimal Arithmetic](screenshots/arithmetic_hex_input.png)
+
+* **Division with Rounding:** Demonstrates division resulting in a repeating decimal, proving that the system successfully applies a selectable rounding method (e.g., round to nearest, ties to even) to the solution.
+  <br>![Division Ties to Even](screenshots/arithmetic_div_ties_even.png)
+
+### 2. Special Cases
+
+* **Infinity Resolution:** Demonstrates the arithmetic logic intercepting division by zero to correctly output special cases such as Infinity in Decimal, Binary, and Hexadecimal forms.
+  <br>![Arithmetic Infinity](screenshots/arithmetic_infinity.png)
+
+* **NaN (Not a Number) Resolution:** Demonstrates handling mathematically undefined operations (like zero divided by zero), resulting in the proper IEEE 754 NaN representation.
+  <br>![Arithmetic NaN](screenshots/arithmetic_nan.png)
+
+### 3. Dynamic Rounding Integration
+
+* **Chopping (toward zero):** Demonstrates performing an arithmetic operation while actively applying the chopping rounding method to truncate the step-by-step solution.
+  <br>![Arithmetic Chopping](screenshots/arithmetic_chopping.png)
+
+* **Round up / Round down:** Demonstrates applying round up (toward +infinity) and round down (toward -infinity) to arithmetic operations, showing real-time changes to the final binary and hexadecimal outputs.
+  <br>![Arithmetic Round Up Down](screenshots/arithmetic_round_up_down.png)
+
 
 ---
 
