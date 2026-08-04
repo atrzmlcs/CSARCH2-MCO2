@@ -168,7 +168,7 @@ invalid inputs.
 -   **More Than 7 Significant Digits:** Demonstrates rounding when the
     input contains more than seven significant digits.
     `<br>`{=html}![More Than 7
-    Digits](screenshots/more_than_7_digits.jpg)
+    Digits](screenshots/more_than_7_digits.png)
 
 ### 4. Incorrect Inputs
 
