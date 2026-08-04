@@ -231,4 +231,6 @@ solution alongside the final Decimal, Binary (spaced), and Hexadecimal results.
 ---
 
 **[Watch our Video Walkthrough on YouTube](https://www.youtube.com/watch?v=4ZoTkq8cZRw&feature=youtu.be)**
+
+---
 **[Visit our Website](https://csarch2-mco2-52ac.onrender.com/)**
